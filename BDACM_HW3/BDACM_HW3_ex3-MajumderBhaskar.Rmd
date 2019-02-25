@@ -1,0 +1,238 @@
+---
+title: "Homework 3 -- MCMC and Stan"
+date: 'Due: Friday, December 21 23:59CET'
+author: "Bhaskar Majumder"
+output:
+  html_document
+---
+
+# Instructions
+* Work on your own, this is an individual assignment. Discussing concepts is perfectly fine, but your answers should be your own.
+* Make sure you have R and RStudio installed. If you are an advanced user and aren't using RStudio, make sure you have `rmarkdown` working in order to 'knit' the HTML output.
+* Download [this zip file](https://michael-franke.github.io/BDACM_2018/homework/BDACM_HW3.zip). This contains the R Markdown files you will edit. There are three separate files.
+* Open the .Rmd files in RStudio.
+* Fill in your name in the 'author' heading.
+* Fill in the required code and answers.
+* 'Knit' the document (`ctrl/cmd` + `shift` + `K` in RStudio) to produce a HTML file.
+* Create a ZIP archive called "BDACM_HW3-LastnameFirstname.zip" containing:
+   * three RMarkdown files:
+     * "BDACM_HW3_ex1-LastnameFirstname.Rmd"
+     * "BDACM_HW3_ex2-LastnameFirstname.Rmd"
+     * "BDACM_HW3_ex3-LastnameFirstname.Rmd"
+   * three rendered HTML documents:
+     * "BDACM_HW3_ex1-LastnameFirstname.html"
+     * "BDACM_HW3_ex2-LastnameFirstname.html"
+     * "BDACM_HW3_ex3-LastnameFirstname.html"
+* Upload the ZIP archive through the 'Tasks' page on Stud.IP before the deadline. You may upload as many times as you like before the deadline, only your final submission will count.
+
+# Grading scheme
+* Total points: 17 (1 point for each question) and 1 point for correctly following submission instructions (correct naming of the ZIP file, correct contents, etc.)
+* For questions that have a coding part and an interpretation part, the total points are divided equally between the two.
+
+# Suggested readings
+* [R4DS](http://r4ds.had.co.nz/) (R for Data Science).
+* Kruschke, John "Doing Bayesian Data Analysis" (selected chapters; see schedule)
+
+# Required R packages
+* `rmarkdown` (comes with RStudio)
+* `tidyverse` (or `ggplot2`, `dplyr`, `purrr`, `tibble`)
+* `TeachingDemos`
+* `ggm`
+* `maps`
+* `rstan`
+* `ggmcmc`
+___
+
+As always, load the required packages and change the seed to your last name.
+
+```{r, eval = T}
+library(TeachingDemos)
+library(ggm)
+library(maps)
+library(tidyverse)
+library(rstan)
+library(ggmcmc)
+
+# set cores to use to the total number of cores (minimally 4)
+options(mc.cores = max(parallel::detectCores(), 4)) 
+# save a compiled version of the Stan model file
+rstan_options(auto_write = TRUE)
+
+lastname <- "majumder"
+
+char2seed(lastname)
+
+```
+
+
+
+# 3. Playing with samples from the prior predictive distribution
+
+We say in class that we can (ab-)use Stan to obtain samples from the prior predictive distribution. Here is a wild script which completely sidesteps the `model` block (the variable `theta_dummy` is only included because otherwise Stan would complain about an empty `model` block). The code generates (feedforward) samples in the `generated quantities` block. The code is trying but failing to do something sensible, in fact something that we have already computed during the course.
+
+```{stan, eval = TRUE, output.var = "posterior_predictive_1"}
+data {
+  int<lower=0> N ;
+  int<lower=0, upper = N> k ;
+}
+parameters {
+  real<lower=0,upper=1> theta_dummy;
+} 
+model {
+  theta_dummy ~ beta(1,1);
+}
+generated quantities {
+  real<lower=0,upper=1> theta_prior;
+  int<lower=0> prior_pred_k;
+  real<upper=1> llh_rep;
+  real<upper=1> llh_hypo;
+  int<lower=0,upper=1> at_least_as_extreme;
+  theta_prior = 0.5;
+  prior_pred_k = binomial_rng(N, theta_prior);
+  llh_rep = binomial_lpmf(prior_pred_k | N, theta_prior);
+  llh_hypo = binomial_lpmf(k | N, theta_prior);
+  at_least_as_extreme = llh_rep >= llh_hypo ? 1 : 0;
+}
+
+```
+
+
+## a. What is this code trying to compute?
+
+*ANSWER:*
+
+First we inspect the samples from the prior distribution of the model. We also generate samples from the prior predictive distribution of a coin flip model with a fixed theta of 0.5. Comparing the binomial distribution with prior knowledge to a binomial distribution without prior knowledge, we  do the posterior predictive check.
+
+
+## b. There is a typo somewhere in here. It's just one symbol that needs to be fixed. Fix it in the code box below.
+
+```{stan, eval = TRUE, output.var = "posterior_predictive_2"}
+data {
+  int<lower=0> N ;
+  int<lower=0, upper = N> k ;
+}
+parameters {
+  real<lower=0,upper=1> theta_dummy;
+} 
+model {
+  theta_dummy ~ beta(1,1);
+}
+generated quantities {
+  real<lower=0,upper=1> theta_prior;
+  int<lower=0> prior_pred_k;
+  real<upper=1> llh_rep;
+  real<upper=1> llh_hypo;
+  int<lower=0,upper=1> at_least_as_extreme;
+  theta_prior = 0.5;
+  prior_pred_k = binomial_rng(N, theta_prior);
+  llh_rep = binomial_lpmf(prior_pred_k | N, theta_prior);
+  llh_hypo = binomial_lpmf(k | N, theta_prior);
+  at_least_as_extreme = llh_rep <= llh_hypo ? 1 : 0;
+}
+
+```
+
+
+
+
+## c. Use the following R code to run this Stan model (copy paste the code in as a string). Is the output what you would have expected?
+
+```{r eval = TRUE}
+
+model_string_1 =  "
+data {
+  int<lower=0> N ;
+  int<lower=0, upper = N> k ;
+}
+parameters {
+  real<lower=0,upper=1> theta_dummy;
+} 
+model {
+  theta_dummy ~ beta(1,1);
+}
+generated quantities {
+  real<lower=0,upper=1> theta_prior;
+  int<lower=0> prior_pred_k;
+  real<upper=1> llh_rep;
+  real<upper=1> llh_hypo;
+  int<lower=0,upper=1> at_least_as_extreme;
+  theta_prior = 0.5;
+  prior_pred_k = binomial_rng(N, theta_prior);
+  llh_rep = binomial_lpmf(prior_pred_k | N, theta_prior);
+  llh_hypo = binomial_lpmf(k | N, theta_prior);
+  at_least_as_extreme = llh_rep <= llh_hypo ? 1 : 0;
+}
+
+"
+
+dataList <- tibble(N = 24, k = 7)
+stan_fit <- stan(model_code = model_string_1, 
+                data = dataList,
+                iter = 50000)
+
+# get posterior probability of flag `at_least_as_extreme` to be 1
+ggmcmc::ggs(stan_fit) %>% filter(Parameter %in% c("at_least_as_extreme")) %>% 
+  group_by(Parameter) %>% summarise(value_of_interest = mean(value)) %>% show()
+
+```
+
+
+
+*ANSWER:*
+
+In only 6% of the times we got a value at least as extreme as our expected number of successes. This is because with a theta of 0.5 we don't pay any attention to the uncertainty that usually lies below theta. The predicted distribution is now too narrow.
+
+
+## d. The previous Stan code computed an interesting value for a model that fixed the parameter `theta` at level 0.5. Change the Stan model code to compute the same kind of output value, but for a model which assumes that `theta` is sampled from a uniform distribution over the unit interval. (Hint: you only need to modify one line very slightly (the resulting code is not pretty or the best code to communicate the intend, but it suffices).)
+
+```{r eval = TRUE}
+
+model_string_2 <- "
+data {
+  int<lower=0> N ;
+  int<lower=0, upper = N> k ;
+}
+parameters {
+  real<lower=0,upper=1> theta_dummy;
+} 
+model {
+  theta_dummy ~ beta(1,1);
+}
+generated quantities {
+  real<lower=0,upper=1> theta_prior;
+  int<lower=0> prior_pred_k;
+  real<upper=1> llh_rep;
+  real<upper=1> llh_hypo;
+  int<lower=0,upper=1> at_least_as_extreme;
+  theta_prior = uniform_rng(0,1);
+  prior_pred_k = binomial_rng(N, theta_prior);
+  llh_rep = binomial_lpmf(prior_pred_k | N, theta_prior);
+  llh_hypo = binomial_lpmf(k | N, theta_prior);
+  at_least_as_extreme = llh_rep <= llh_hypo ? 1 : 0;
+}
+
+"
+
+dataList2 <- tibble(N = 24, k = 7)
+stan_fit2 <- stan(model_code = model_string_2, 
+                data = dataList2,
+                iter = 50000)
+
+# get posterior probability of flag `at_least_as_extreme` to be 1
+ggmcmc::ggs(stan_fit2) %>% filter(Parameter %in% c("at_least_as_extreme")) %>% 
+  group_by(Parameter) %>% summarise(value_of_interest = mean(value)) %>% show()
+
+```
+
+
+
+## e. How would you interpret/describe the number you have just computed?
+
+*ANSWER:*
+
+The probability of getting a value at least as extreme as the prior increased from 6% to 16%. The reason for that is theta is changed to a posterior predictive distribution so that it now represents the uncertainty we have regarding theta.
+
+___
+
+End of assignment
+

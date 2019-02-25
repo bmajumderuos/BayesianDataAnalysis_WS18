@@ -1,0 +1,217 @@
+---
+title: "Homework 3 -- MCMC and Stan"
+date: 'Due: Friday, December 21 23:59CET'
+author: "Bhaskar Majumder"
+output:
+  html_document
+---
+
+# Instructions
+* Work on your own, this is an individual assignment. Discussing concepts is perfectly fine, but your answers should be your own.
+* Make sure you have R and RStudio installed. If you are an advanced user and aren't using RStudio, make sure you have `rmarkdown` working in order to 'knit' the HTML output.
+* Download [this zip file](https://michael-franke.github.io/BDACM_2018/homework/BDACM_HW3.zip). This contains the R Markdown files you will edit. There are three separate files.
+* Open the .Rmd files in RStudio.
+* Fill in your name in the 'author' heading.
+* Fill in the required code and answers.
+* 'Knit' the document (`ctrl/cmd` + `shift` + `K` in RStudio) to produce a HTML file.
+* Create a ZIP archive called "BDACM_HW3-LastnameFirstname.zip" containing:
+   * three RMarkdown files:
+     * "BDACM_HW3_ex1-LastnameFirstname.Rmd"
+     * "BDACM_HW3_ex2-LastnameFirstname.Rmd"
+     * "BDACM_HW3_ex3-LastnameFirstname.Rmd"
+   * three rendered HTML documents:
+     * "BDACM_HW3_ex1-LastnameFirstname.html"
+     * "BDACM_HW3_ex2-LastnameFirstname.html"
+     * "BDACM_HW3_ex3-LastnameFirstname.html"
+* Upload the ZIP archive through the 'Tasks' page on Stud.IP before the deadline. You may upload as many times as you like before the deadline, only your final submission will count.
+
+# Grading scheme
+* Total points: 17 (1 point for each question) and 1 point for correctly following submission instructions (correct naming of the ZIP file, correct contents, etc.)
+* For questions that have a coding part and an interpretation part, the total points are divided equally between the two.
+
+# Suggested readings
+* [R4DS](http://r4ds.had.co.nz/) (R for Data Science).
+* Kruschke, John "Doing Bayesian Data Analysis" (selected chapters; see schedule)
+
+# Required R packages
+* `rmarkdown` (comes with RStudio)
+* `tidyverse` (or `ggplot2`, `dplyr`, `purrr`, `tibble`)
+* `TeachingDemos`
+* `ggm`
+* `maps`
+* `rstan`
+* `ggmcmc`
+___
+
+As always, load the required packages and change the seed to your last name.
+
+```{r, eval = T}
+library(TeachingDemos)
+library(ggm)
+library(maps)
+library(tidyverse)
+library(rstan)
+library(ggmcmc)
+
+# set cores to use to the total number of cores (minimally 4)
+options(mc.cores = max(parallel::detectCores(), 4)) 
+# save a compiled version of the Stan model file
+rstan_options(auto_write = TRUE)
+
+lastname <- "majumder"
+
+char2seed(lastname)
+
+```
+
+
+
+# 2. Inferring a difference between means
+
+Previously during this course, we have looked at a particular instantiation of a $t$-test as tools to decide whether to retain or abandon a null hypothesis that the means of two sets of samples are equal. Let's now use Bayesian parameter inference to address the same kind of question.
+
+Here is some data:
+
+```{r, eval = TRUE}
+
+set.seed(2018)
+N1 <- 20
+N2 <- 20
+dataList <- list(y1 = rnorm(N1, mean = 100, sd = 20), 
+                 y2 = rnorm(N2, mean = 107, sd = 20),
+                 N1 = N1,
+                 N2 = N2)
+
+```
+
+Here is a (clumsy!) Stan model for this data. Notice that we estimate the means of both vectors/groups independently and use the `generated quantities` block to obtain samples to approximate our posterior beliefs about the difference between these means.
+
+```{stan, eval = TRUE, output.var = "some_string"}
+
+data {
+  int N1;
+  int N2;
+  real y1[N1] ;
+  real y2[N2] ;
+}
+parameters {
+  real mu1 ;
+  real mu2 ;
+  real sd1 ;
+  real sd2 ;
+} 
+model {
+  mu1 ~ normal(100, 100); // diffuse but roughly accurate priors
+  mu2 ~ normal(100, 100); 
+  sd1 ~ gamma(1, 100); // sds are assumed to be low a priori
+  sd2 ~ gamma(1, 100); 
+  y1 ~ normal(mu1,sd1);
+  y2 ~ normal(mu2,sd2);
+}
+generated quantities {
+  real delta;
+  delta = mu1 - mu2;
+}
+
+
+```
+
+
+## a. Run this model by completing the following code and produce a summary of the fit.
+
+```{r, eval = TRUE}
+
+model_string <-  "
+
+data {
+  int N1;
+  int N2;
+  real y1[N1] ;
+  real y2[N2] ;
+}
+parameters {
+  real mu1 ;
+  real mu2 ;
+  real sd1 ;
+  real sd2 ;
+} 
+model {
+  mu1 ~ normal(100, 100); // diffuse but roughly accurate priors
+  mu2 ~ normal(100, 100); 
+  sd1 ~ gamma(1, 100); // sds are assumed to be low a priori
+  sd2 ~ gamma(1, 100); 
+  y1 ~ normal(mu1,sd1);
+  y2 ~ normal(mu2,sd2);
+}
+generated quantities {
+  real delta;
+  delta = mu1 - mu2;
+}
+
+"
+model_string
+
+fit <- stan(model_code = model_string,
+           iter = 10000,
+           data = dataList)
+
+summary(fit)
+
+
+
+
+```
+
+
+## b. Based on which information in this summary would you conclude that it is plausible to assume that the samples are representative of the target (posterior) distribution?
+
+*ANSWER:*
+Based on the value of Rhat. To check if the model represents the ground truth, compare the marginal posterior intervals at 2.5% and 97.5%  with the assumed sample mean for y1 and y2. We see that in the case of mu1 the assumed value of 100 is very unlikely since it is not found inside the interval whereas the assumed value of mu2 is most likely to true since it's between the 10% interval.
+
+
+
+
+## c. Produce a plot of the posterior density of all model parameters.
+
+```{r, eval = TRUE}
+# your code here
+data1 <- ggmcmc::ggs(fit)
+
+ggplot(data1, aes(x=value)) + geom_density() + facet_wrap(~ Parameter, scales = "free")
+
+```
+
+
+
+## d. Comment on each of the parameters whether the inferred values are reasonable given the data (of which we know the distributions that generated them) and the model.
+
+Values for the means is in accordance with our expectation when sampled from a normal distribution.
+
+
+## e. Calculate a 95% HDI for the posterior of `delta`. (Hint: we first extract the samples from the `stan_fit` object into a tibble, and then use a function from the packages `HDInterval`, which you may have to install.)
+
+```{r, eval = T}
+library(HDInterval)
+
+data1 = data1 %>% filter(Parameter == 'delta')
+HDInterval::hdi(data1, credMass = 0.95 )
+```
+
+
+## f. Interpret the result from the HDI computation. If the model is true, should we conclude from the data that there is likely a difference in means?
+95 % highest density interval (HDI) contains the parameter values of highest probability and that span the 95 % most probable values. Any parameter value inside the HDI has higher probability density (i.e., higher credibility) than any parameter value outside the HDI. As the difference (between the means) of 0 falls outside of this interval, we can say that there is likely a difference in means.
+
+
+## g. Here is the output of the corresponding $t$-test in a frequentist paradigm.
+
+```{r, eval=TRUE}
+with(dataList, t.test(y1,y2, paired = FALSE, var.equal = FALSE))
+```
+
+How would you interpret this result? Would you reject the null hypothesis (that the means are equal)?
+
+Since p-value is 0.1289 (which is greater than 0.05),it means that the result has failed to reach significance. We do not reject the null hypothesis.
+
+___
+
+End of assignment

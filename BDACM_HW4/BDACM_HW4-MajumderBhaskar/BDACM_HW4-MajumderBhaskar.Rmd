@@ -1,0 +1,621 @@
+---
+title: "Homework 4 -- Model comparison and model criticism"
+date: 'Due: Sunday, February 3 23:59CET'
+author: "Bhaskar Majumder"
+output:
+  html_document
+---
+
+# Instructions
+* Work on your own, this is an individual assignment. Discussing concepts is perfectly fine, but your answers should be your own.
+* Make sure you have R and RStudio installed. If you are an advanced user and aren't using RStudio, make sure you have `rmarkdown` working in order to 'knit' the HTML output.
+* Download [this zip file](https://michael-franke.github.io/BDACM_2018/homework/BDACM_HW4.zip). This contains the R Markdown file you will edit.
+* Open the .Rmd files in RStudio.
+* Fill in your name in the 'author' heading.
+* Fill in the required code and answers.
+* 'Knit' the document (`ctrl/cmd` + `shift` + `K` in RStudio) to produce a HTML file.
+* Create a ZIP archive called "BDACM_HW4-LastnameFirstname.zip" containing:
+   * an RMarkdown file:
+     * "BDACM_HW4-LastnameFirstname.Rmd"
+   * a rendered HTML document:
+     * "BDACM_HW4-LastnameFirstname.html"
+* Upload the ZIP archive through the 'Tasks' page on Stud.IP before the deadline. You may upload as many times as you like before the deadline, only your final submission will count.
+
+# Grading scheme
+* Total points: 20, points as indicated and 1 point for correctly following submission instructions (correct naming of the ZIP file, correct contents, etc.)
+* For questions that have a coding part and an interpretation part, the total points are divided equally between the two.
+
+# Suggested readings
+* [R4DS](http://r4ds.had.co.nz/) (R for Data Science).
+* Kruschke, John "Doing Bayesian Data Analysis" (selected chapters; see schedule)
+
+# Required R packages
+* `rmarkdown` (comes with RStudio)
+* `tidyverse` (or `ggplot2`, `dplyr`, `purrr`, `tibble`)
+* `TeachingDemos`
+* `rstan`
+* `ggmcmc`
+* `bridgesampling`
+* `polspline`
+
+___
+
+As always, load the required packages and change the seed to your last name.
+
+```{r, eval = T}
+library(TeachingDemos)
+library(tidyverse)
+library(rstan)
+library(ggmcmc)
+library(bridgesampling)
+library(polspline)
+
+# set cores to use to the total number of cores (minimally 4)
+options(mc.cores = max(parallel::detectCores(), 4))
+# save a compiled version of the Stan model file
+rstan_options(auto_write = TRUE)
+
+lastname <- "majumder"
+
+char2seed(lastname)
+
+```
+
+
+
+Here is some data from a forgetting experiment. `t` is the time point, and 
+`y` is the proportion of people who correctly recalled the stimulus.
+
+```{r}
+
+y <- c(.94, .77, .40, .26, .24, .16)
+t <- c(1,   3,   6,   9,  12,  18)
+obs <- y * 100
+
+forgetting_data <- tibble(obs = obs,
+                   N = 100,
+                   t = t)
+
+forgetting_data
+```
+
+
+# 1. Implement models
+
+Below is the code for the power model of forgetting we discussed in class:
+\[P(\text{recall} | t; c, d) = ct^{-d}\]
+where \(0 < c, d < 1.5\)
+
+a. (1 point)
+---
+
+Implement an alternative model based on this exponential model for each participant:
+
+\[P(\text{recall} | t; a, b) = a \exp(-bt)\]
+where \(0 < a, b < 1.5\)
+
+```{r}
+power_model_str <- "
+
+data {
+  int obs[6] ;
+  real t[6] ;
+}
+parameters {
+  real<lower=0,upper=1.5> c ;
+  real<lower=0,upper=1.5> d ;
+} 
+transformed parameters {
+  real theta[6];
+  for (i in 1:6) {
+    theta[i] = c * t[i]^(-d) ; 
+    
+  }
+}
+model {
+  // increment target log score with
+  // probability of current samples from prior
+  target += uniform_lpdf(c | 0, 1.5);
+  target += uniform_lpdf(d | 0, 1.5);
+  // increment target log score with
+  // likelihood of data given current parameter samples
+  target += binomial_lpmf(obs | 100, theta);
+}
+
+"
+
+
+```
+
+```{r,  eval = T}
+
+exponential_model_str <- "
+data {
+  int obs[6] ;
+  real t[6] ;
+}
+parameters {
+  real<lower=0,upper=1.5> a ;
+  real<lower=0,upper=1.5> b ;
+} 
+transformed parameters {
+  real theta[6];
+  for (i in 1:6) {
+    theta[i] = a * exp(t[i]*(-b)) ; 
+    
+  }
+}
+model {
+  // increment target log score with
+  // probability of current samples from prior
+  target += uniform_lpdf(a | 0, 1.5);
+  target += uniform_lpdf(b | 0, 1.5);
+  // increment target log score with
+  // likelihood of data given current parameter samples
+  target += binomial_lpmf(obs | 100, theta);
+}
+
+"
+
+```
+
+
+# 2. Parameter inference
+
+a. (2 points)
+---
+
+For both models, complete the code below to draw samples from the posterior distribution. NB: you should use a large amount of samples (as indicated) so that later bridge sampling is reliable. We use the `control` parameter here to fine-tune the inference for these models. Remember to set `eval = TRUE`.
+
+```{r, eval = T}
+# complete the code below
+stanfit_exponential <- stan(model_code = exponential_model_str,
+                            iter = 50000,
+                            warmup = 10000,
+                            control = list(adapt_delta = 0.999),
+                            pars = c("a","b"), # replace NA with parameters to inspect
+                            data =  forgetting_data ## provide data
+                            )
+
+stanfit_power <- stan(model_code = power_model_str,# specify model
+                      iter = 50000,
+                      warmup = 10000,
+                      control = list(adapt_delta = 0.999),
+                      pars = c("c","d"), # replace NA with parameters to inspect
+                      data =  forgetting_data## provide data
+                      )                 
+
+```
+
+
+
+b. (1 point)
+---
+
+Show a summary for each fit
+
+```{r,  eval = T}
+# YOUR CODE HERE
+print(stanfit_exponential)
+
+print(stanfit_power)
+#sum_exp <- summary(stanfit_exponential)
+#sum_exp$summary
+
+```
+
+
+
+c. (1 point)
+---
+
+Make traceplots for the samples for both models
+
+```{r,  eval = T}
+# YOUR CODE HERE
+ggs_traceplot(ggs(stanfit_exponential))
+ggs_traceplot(ggs(stanfit_power))
+
+
+
+```
+
+
+
+d. (1 point)
+---
+
+Plot the density for posterior samples for both models
+
+```{r,  eval = T}
+# YOUR CODE HERE
+plot(stanfit_exponential, plotfun = "dens")
+
+plot(stanfit_power, plotfun = "dens")
+
+
+```
+
+
+
+
+
+# 3. Bridge Sampling
+
+a. (1 point)
+---
+
+Approximate the marginal likelihood of each model using the `bridgesampling` package (Hint: use `bridgesampling::bridge_sampler()` as we did in the lecture, and use option `silent = T` to suppress output in the markdown).
+
+```{r,  eval = T}
+# YOUR CODE HERE
+
+bridge_exponential = bridgesampling::bridge_sampler(samples = stanfit_exponential, silent = T)
+bridge_power = bridgesampling::bridge_sampler(samples = stanfit_power, silent = T)
+
+
+```
+
+
+
+b. (1 point)
+---
+
+Determine the error of the estimated marginal likelihoods using `bridgesampling::error_measures`.
+
+```{r,  eval = T}
+# YOUR CODE HERE
+
+#bridgesampling::error_measures(bridge_exponential)
+#bridgesampling::error_measures(bridge_power)
+
+
+paste("Estimated error percentage: ", 
+ list('exponential' = error_measures(bridge_exponential)$percentage, 
+  'power' = error_measures(bridge_power)$percentage))
+
+
+```
+
+
+c. (1 point)
+---
+
+The previous results only give you an estimate for the marginal likelihood of the data given each model. But you can use these estimates to compute the Bayes factor in favour of the exponential model.
+
+
+```{r,  eval = T}
+# YOUR CODE HERE
+bayes_factor(bridge_exponential, bridge_power)
+
+
+```
+
+
+d. (1 point)
+---
+
+Interpret the Bayes factor. What is the value? What does it mean?
+
+*ANSWER:*
+The value is around 1219. It contrasts the predictive performance of one model against the other in the light of the data favouring the exponential model in our case. 
+(your answer here)
+
+
+
+
+# 4. Savage-Dickey
+
+Use the Savage-Dickey method to compute the Bayes factor in favor of the exponential model, when compared against a special case (properly nested model) of the exponential model where a = 1. 
+
+a. (1 point)
+---
+
+Fill in the required code:
+
+```{r, eval = T}
+# NB: we take only a subsest of the samples because otherwise polspline will not work
+
+post_samples <- filter(ggs(stanfit_exponential), 
+                       Parameter == "a" & Iteration <= 1000)$value
+
+fit.posterior <- polspline::oldlogspline(post_samples, 
+                                         ubound=1.5, lbound=0)
+
+posterior_a <- polspline::doldlogspline(1, fit.posterior)
+
+# calculate the Bayes factor via the Savage-Dickey method
+# YOUR CODE HERE
+
+paste0("Bayes Factor: ", 
+       round(1/posterior_a,3) )
+
+
+```
+
+
+
+
+b. (1 point)
+---
+
+Interpret the result
+
+Is this strong or mild evidence in favor of one of the two models?
+
+*ANSWER:*
+Mild evidence for the properly nested model
+(your answer here)
+
+
+
+# 5. Posterior predictive distribution
+
+We want to approximate the posterior predictive distribution. For this, we draw samples from the posterior, using basically the same scripts as above for posterior estimation. Additionally we generate a "sample imaginary prediction" of data that we'd expect to see in an exact repetition of the experiment, for each sampled vector of parameter values. To do so, we use the `generated parameters` block at the end of the Stan model code.
+
+a. (2 points)
+---
+
+Complete the pseudo-code below for the exponential and the power model with actual Stan code which does that. (Hint: use command `binomial_rng` to take samples from a binomial distribution; check the Stan manual for its syntax.)
+
+```{r,  eval = T}
+power_pred_model_str <- " data {
+  int obs[6] ;
+  real t[6] ;
+}
+parameters {
+  real<lower=0,upper=1.5> c ;
+  real<lower=0,upper=1.5> d ;
+} 
+transformed parameters {
+  real theta[6];
+  for (i in 1:6) {
+    theta[i] = c * t[i]^(-d) ;   
+  }
+}
+model {
+  target += uniform_lpdf(c | 0, 1.5);
+  target += uniform_lpdf(d | 0, 1.5);
+  target += binomial_lpmf(obs | 100, theta);
+}
+
+generated quantities {
+  int post_predict_sample[6];
+  for(i in 1:6) {
+post_predict_sample[i] = binomial_rng(100, theta[i]);
+
+  }     
+}
+
+"
+powerfit <- stan(model_code = power_pred_model_str,
+           iter = 50000,
+           data = forgetting_data,
+           
+           warmup = 10000,
+          control = list(adapt_delta = 0.999999)
+           )
+print(powerfit)
+
+```
+
+```{r,  eval = T}
+exponential_pred_model_str <- " data {
+  int obs[6] ;
+  real t[6] ;
+}
+parameters {
+  real<lower=0,upper=1.5> a ;
+  real<lower=0,upper=1.5> b ;
+} 
+transformed parameters {
+  real theta[6];
+  for (i in 1:6) {
+    theta[i] = a *exp(-b*t[i]) ;   
+  }
+}
+model {
+  target += uniform_lpdf(a | 0, 1.5);
+  target += uniform_lpdf(b | 0, 1.5);
+  target += binomial_lpmf(obs | 100, theta);
+}
+
+generated quantities {
+  int post_predict_sample_exp[6];
+  
+  for(i in 1:6) {
+post_predict_sample_exp[i] = binomial_rng(100, theta[i]);
+  }
+
+      
+}
+
+"
+expfit <- stan(model_code = exponential_pred_model_str,
+           
+           data = forgetting_data,
+           
+           control = list(adapt_delta = 0.999999)
+           )
+print(expfit)
+
+```
+
+
+
+b. (2 points)
+---
+
+Plot the data and a visual posterior predictive check
+
+Use the samples from variable `post_predict_sample` to generate plots for a visual posterior predictive check, which should similar what we had in the [lecture](https://michael-franke.github.io/BDACM_2018/slides/15_Inference_Copmarison_Criticism.html#23). Use y limits of 0 to 100.
+
+Hint: use `geom_point()` for the real data and `geom_pointrange()` for the predicted values and 95% credible intervals.
+
+```{r,  eval = T}
+# YOUR CODE HERE
+df_fit = as.data.frame(summary(powerfit,pars= "post_predict_sample"))
+ggplot(df_fit, aes(t, obs)) +  
+ geom_point(size=3) +ylim(0,100) + geom_pointrange(mapping = aes(t, df_fit$summary.50.), ymin = df_fit$summary.2.5., ymax = df_fit$summary.97.5., colour = "#56B4E9") + ggtitle("power model")
+
+```
+
+```{r}
+pow_fit = as.data.frame(summary(powerfit,pars= "post_predict_sample", probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))
+ggplot(pow_fit, aes(t, obs)) +  
+ geom_point() +ylim(0,100) + geom_pointrange(mapping = aes(t, pow_fit$summary.50.), ymin = pow_fit$summary.2.5., ymax = pow_fit$summary.97.5., colour = "#56B4E8") + ggtitle("power model")
+
+
+exp_fit = as.data.frame(summary(expfit,pars= "post_predict_sample_exp"))
+ggplot(pow_fit, aes(t, obs)) +  
+ geom_point() +ylim(0,100) + geom_pointrange(mapping = aes(t, exp_fit$summary.50.), ymin = exp_fit$summary.2.5., ymax = exp_fit$summary.97.5., colour = "#56B4E9") + ggtitle("exponential model") 
+
+```
+
+
+# 6. Computing posterior predictive $p$-value
+
+To compute the posterior predictive $p$-value most efficiently (in the sense of having to write least code; not necessarily in the sense of fastest run time), we will expand the Stan code even more. Based on your previous code which computes samples from the posterior predictive distribution, expand the Stan code even more to also generate two more quantities. The first is the likelihood of the observed data under the currently sampled parameter values. The second is the likelihood of the `post_predict_sample` under the currently sampled parameter value. The posterior predictive $p$-value is approximated by the mean of the variable `post_pred_p_value_flag` in the pseudo-code below. 
+
+a. (2 points)
+---
+
+Complete the code accordingly.
+
+```{r,  eval = T}
+
+library(rstan)
+power_model_str_pred <- " data {
+  int obs[6] ;
+  real t[6] ;
+}
+parameters {
+  real<lower=0,upper=1.5> c ;
+  real<lower=0,upper=1.5> d ;
+} 
+transformed parameters {
+  real theta[6];
+  for (i in 1:6) {
+    theta[i] = c * t[i]^(-d) ;   
+  }
+}
+model {
+  target += uniform_lpdf(c | 0, 1.5);
+  target += uniform_lpdf(d | 0, 1.5);
+  target += binomial_lpmf(obs | 100, theta);
+}
+
+generated quantities {
+  int post_predict_sample[6];
+  real<upper=1> likelihood_data;
+  real<upper=1>likelihood_post_predict_sample;
+  int<lower=0,upper=1> post_pred_p_value_flag;
+  for(i in 1:6) {
+  post_predict_sample[i] = binomial_rng(100, theta[i]);
+};
+
+  likelihood_data = binomial_lpmf(obs| 100, theta);
+  likelihood_post_predict_sample = binomial_lpmf(post_predict_sample| 100, theta );
+  post_pred_p_value_flag = likelihood_data >= likelihood_post_predict_sample;
+}
+
+"
+
+
+
+exponential_model_str_pred <- "data {
+  int obs[6] ;
+  real t[6] ;
+}
+parameters {
+  real<lower=0,upper=1.5> a ;
+  real<lower=0,upper=1.5> b ;
+} 
+transformed parameters {
+  real theta[6];
+  for (i in 1:6) {
+    theta[i] = a * exp(t[i]*(-b)) ;   
+  }
+}
+model {
+  target += uniform_lpdf(a | 0, 1.5);
+  target += uniform_lpdf(b | 0, 1.5);
+  target += binomial_lpmf(obs | 100, theta);
+}
+
+generated quantities {
+  int post_predict_sample_exp1[6];
+  real<upper=1> likelihood_data1;
+  real<upper=1>likelihood_post_predict_sample1;
+  int<lower=0,upper=1> post_pred_p_value_flag1;
+  for(i in 1:6) {
+  post_predict_sample_exp1[i] = binomial_rng(100, theta[i]);
+};
+
+  likelihood_data1 = binomial_lpmf(obs| 100, theta);
+  likelihood_post_predict_sample1 = binomial_lpmf(post_predict_sample_exp1| 100,theta );
+  post_pred_p_value_flag1 = likelihood_data1 >= likelihood_post_predict_sample1;
+}
+
+"
+
+
+
+```
+
+
+
+
+
+b. (1 point)
+---
+
+Retrieve estimates of the posterior predictive $p$-values for both the exponential and power models.
+
+```{r,  eval = T}
+
+# YOUR CODE HERE
+# Run the stan models and retrieve an estimate of the posterior predictive 
+# p-value for both exponential and power model.
+
+fit_pow <- stan(model_code = power_model_str_pred,
+           iter = 50000,
+           data = forgetting_data,
+           
+           warmup = 10000,
+          control = list(adapt_delta = 0.999999)
+           )
+print(fit_pow)
+
+ggmcmc::ggs(fit_pow) %>% filter(Parameter %in% c("post_pred_p_value_flag")) %>% 
+  group_by(Parameter) %>% summarise(value_of_interest = mean(value)) %>% show()
+
+
+fit_exp <- stan(model_code = exponential_model_str_pred,
+           iter = 50000,
+           data = forgetting_data,
+           
+           warmup = 10000,
+           control = list(adapt_delta = 0.999999)
+           )
+print(fit_exp)
+
+ggmcmc::ggs(fit_exp) %>% filter(Parameter %in% c("post_pred_p_value_flag1")) %>% 
+  group_by(Parameter) %>% summarise(value_of_interest = mean(value)) %>% show()
+
+```
+
+
+**Can either of the models be criticised based on these values? If so, which and why?**
+
+*ANSWER:*
+The posterior predictive p value for the power model, is around 0.0001 which is less than the threshold p = 0.05, hence the power model is not able to capture the variance in the observed data as well as the exponential model whose posterior predictive p value is 0.068(greater than the threshold).  
+
+
+
+
+
+___
+
+
+End of assignment

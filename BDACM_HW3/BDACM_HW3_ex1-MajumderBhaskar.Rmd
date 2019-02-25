@@ -1,0 +1,341 @@
+---
+title: "Homework 3 -- MCMC and Stan"
+date: 'Due: Friday, December 21 23:59CET'
+author: "Bhaskar Majumder"
+output:
+  html_document
+---
+
+# Instructions
+* Work on your own, this is an individual assignment. Discussing concepts is perfectly fine, but your answers should be your own.
+* Make sure you have R and RStudio installed. If you are an advanced user and aren't using RStudio, make sure you have `rmarkdown` working in order to 'knit' the HTML output.
+* Download [this zip file](https://michael-franke.github.io/BDACM_2018/homework/BDACM_HW3.zip). This contains the R Markdown files you will edit. There are three separate files.
+* Open the .Rmd files in RStudio.
+* Fill in your name in the 'author' heading.
+* Fill in the required code and answers.
+* 'Knit' the document (`ctrl/cmd` + `shift` + `K` in RStudio) to produce a HTML file.
+* Create a ZIP archive called "BDACM_HW3-LastnameFirstname.zip" containing:
+   * three RMarkdown files:
+     * "BDACM_HW3_ex1-LastnameFirstname.Rmd"
+     * "BDACM_HW3_ex2-LastnameFirstname.Rmd"
+     * "BDACM_HW3_ex3-LastnameFirstname.Rmd"
+   * three rendered HTML documents:
+     * "BDACM_HW3_ex1-LastnameFirstname.html"
+     * "BDACM_HW3_ex2-LastnameFirstname.html"
+     * "BDACM_HW3_ex3-LastnameFirstname.html"
+* Upload the ZIP archive through the 'Tasks' page on Stud.IP before the deadline. You may upload as many times as you like before the deadline, only your final submission will count.
+
+# Grading scheme
+* Total points: 17 (1 point for each question) and 1 point for correctly following submission instructions (correct naming of the ZIP file, correct contents, etc.)
+* For questions that have a coding part and an interpretation part, the total points are divided equally between the two.
+
+# Suggested readings
+* [R4DS](http://r4ds.had.co.nz/) (R for Data Science).
+* Kruschke, John "Doing Bayesian Data Analysis" (selected chapters; see schedule)
+
+# Required R packages
+* `rmarkdown` (comes with RStudio)
+* `tidyverse` (or `ggplot2`, `dplyr`, `purrr`, `tibble`)
+* `TeachingDemos`
+* `ggm`
+* `maps`
+* `rstan`
+* `ggmcmc`
+___
+
+As always, load the required packages and change the seed to your last name.
+
+```{r, eval = T}
+# rm(list=ls())
+library(TeachingDemos)
+library(ggm)
+library(maps)
+library(tidyverse)
+library(rstan)
+library(ggmcmc)
+
+# set cores to use to the total number of cores (minimally 4)
+options(mc.cores = max(parallel::detectCores(), 4)) 
+# save a compiled version of the Stan model file
+rstan_options(auto_write = TRUE)
+
+lastname <- "majumder"
+
+char2seed(lastname)
+
+```
+
+
+
+# 1. Metropolis-Hastings downunder
+
+Suppose you decide to move to Australia. After a few years living there, you grow tired of the current politics and decide to try to become prime minister yourself.
+You realise you should spend your time campaigning in the capital cities of each state/territory: Sydney, Melbourne, Brisbane, Adelaide, Perth, Darwin, Hobart, Canberra.
+
+But wait, what does Australia even look like? Luckily there's an R function for that:
+
+```{r, eval = T}
+# names of the capital cities
+capitals <- c("Hobart", "Adelaide", "Perth", "Darwin", "Brisbane", "Sydney", "Melbourne", "Canberra")
+
+# filter only Australian capital cities
+aus_cities <- world.cities %>%
+  filter(country.etc == "Australia",
+         name %in% capitals)
+
+# draw the map and the cities
+maps::map(database = "world", region = "Australia"); map.cities(x = aus_cities)
+```
+
+
+To be most efficient, you want to spend time in each city proportional to the populations.
+
+Because Australia has a huge desert in the middle (which you really don't want to drive through!),
+you can only travel around the coast between "neighbouring" capital cities.
+
+
+The following code will add the neighbours to the data frame:
+
+```{r, eval = T}
+aus_cities <- as_tibble(aus_cities)
+
+# neighbouring cities
+aus_cities$neighbour1 <- c("Perth", "Sydney", "Hobart", "Brisbane", "Melbourne", "Adelaide", "Darwin", "Canberra")
+aus_cities$neighbour2 <- c("Melbourne", "Darwin", "Sydney", "Perth", "Canberra", "Hobart", "Adelaide", "Brisbane")
+
+# type of edge to draw in markov graph, "l" means line
+aus_cities$edge_type <- rep("l", 8)
+
+#aus_cities
+
+```
+
+## a. Visualising the cities as a Markov Chain
+
+With the help of the `ggm` package and some data wrangling, you can visualise the cities as a Markov Chain.
+
+```{r, eval = TRUE}
+
+aus_cities %>%
+
+  # only select the edge_type, name and neighbour1 columns
+  select(edge_type, name, neighbour1) %>%
+
+  # turn into a matrix
+  as.matrix() %>%
+
+  # transpose the matrix
+  t() %>%
+
+  # turn into a vector
+  as.vector() %>%
+
+  # plot the Markov Chain
+  ggm::plotGraph(tcltk = F, noframe = T, nodesize = 25)
+
+# aus_cities
+
+```
+
+
+
+## b. Running the Metropolis-Hastings algorithm
+
+You decide that the best way to travel throughout your campaign is to follow
+the Metropolis-Hastings algorithm. The algorithm has two steps:
+
+1. Proposal
+2. Acceptance
+
+Each night in a city, you **propose** a new destitation. Then, depending on the population of the proposed city in comparison to your current city, you either **accept** your proposal or **reject** it. If you accept your proposal, you'll move to the new city the next day. If you reject your proposal, you'll stay another night in the same city.
+
+The proposed city is a random choice between the current cities neighbours.
+
+If the proposed city has a population at least as large as your current city, you'll accept the proposal.
+
+Otherwise, you'll accept the proposal with a probability equal to the ratio $\frac{population_{proposed}}{population_{current}}$.
+
+
+A single step of Metropolis-Hastings would look something like this (fill in the code and change to `eval = TRUE`):
+
+```{r, eval = TRUE}
+# start in a random capital city
+# aus_cities
+current_city <- sample(aus_cities$name, 1, replace = TRUE)
+
+current_city
+
+
+
+# choose a proposal city
+# get the neighbours of the current city
+current_neighbours <- aus_cities %>%
+
+  # filter only the the row for the current city name
+  filter(name == current_city) %>%
+
+  # select only the neighbour columns
+  select(neighbour1, neighbour2) %>%
+  
+  t()
+
+current_neighbours
+
+
+
+# randomly sample one of the current neighbours
+proposed_city <- sample(x =  current_neighbours,
+                        size = 1)
+
+proposed_city 
+# compare the proposed city to the current city on population:
+
+# current city's population
+current_pop <- aus_cities %>%
+
+               # filter only the current city
+               filter(name == current_city) %>%
+
+               # select the population column
+               select(pop)
+current_pop
+
+# proposed city's population (same procedure as above)
+proposed_pop <- aus_cities %>%
+
+               # filter only the current city
+               filter(name == proposed_city) %>%
+
+               # select the population column
+               select(pop)
+
+proposed_pop
+# calculate the ratio of the two populations (proposed / current)
+pop_ratio <- (proposed_pop/current_pop)[1,1]
+
+# calculate the probability of accepting the proposal
+accept_prob <- min(1, pop_ratio)
+
+# accept the proposed city with this probability, and reject with the complementary probability (1 - the prob)
+new_city <- sample(x = c(current_city, proposed_city), size = 1,
+                   prob = c(1-accept_prob, accept_prob))
+
+# print the current (starting) city and the new city
+print(current_city)
+print(new_city)
+
+```
+
+
+
+## c. Two years of campaigning
+
+If you spent two years campaigning (half an actual term, as seems to be the standard these days) following the Metropolis Hastings algorithm, the number of days you spend in each city should be proportional to the populations. (Fill in the code and change to `eval = TRUE`)
+
+```{r, eval = TRUE}
+
+n_days = 2*365 # number of days campaigning
+
+# create a dataframe to record the countries
+city_visits <- data_frame(time = 1:n_days,
+                          city = NA)
+
+# start in a random city
+current_city <- sample(aus_cities$name, 1, replace = TRUE)
+
+for (i in 1:n_days) {
+
+# save the current city into the data frame
+city_visits$city[i] <- current_city
+
+# PUT THE METROPOLIS HASTINGS ALGORITHM CODE HERE (FROM ABOVE)
+
+# choose a proposal city
+# get the neighbours of the current city
+current_neighbours <- aus_cities %>%
+
+  # filter only the the row for the current city name
+  filter(name == current_city) %>%
+
+  # select only the neighbour columns
+  select(neighbour1, neighbour2) %>%
+  
+  t()
+
+#current_neighbours
+
+
+
+# randomly sample one of the current neighbours
+proposed_city <- sample(x =  current_neighbours,
+                        size = 1)
+
+#proposed_city 
+# compare the proposed city to the current city on population:
+
+# current city's population
+current_pop <- aus_cities %>%
+
+               # filter only the current city
+               filter(name == current_city) %>%
+
+               # select the population column
+               select(pop)
+#current_pop
+
+# proposed city's population (same procedure as above)
+proposed_pop <- aus_cities %>%
+
+               # filter only the current city
+               filter(name == proposed_city) %>%
+
+               # select the population column
+               select(pop)
+
+#proposed_pop
+# calculate the ratio of the two populations (proposed / current)
+pop_ratio <- (proposed_pop/current_pop)[1,1]
+
+# calculate the probability of accepting the proposal
+accept_prob <- min(1, pop_ratio)
+
+# accept the proposed city with this probability, and reject with the complementary probability (1 - the prob)
+new_city <- sample(x = c(current_city, proposed_city), size = 1,
+                   prob = c(1-accept_prob, accept_prob))
+
+
+# set the current city to the new city
+current_city <- new_city
+}
+
+#city_visits
+```
+
+
+
+## d. Visualising your journey
+
+Use ggplot to make bar plots of both the true populations of the cities and the count of the visits from the two year campaigning period. (Fill in the code and change to `eval = TRUE`)
+
+```{r, eval = TRUE}
+
+# plot the populations
+ggplot(data=aus_cities , mapping = aes(x = name, y = pop)) +
+  geom_col()
+
+# plot the frequency of visits
+ggplot(city_visits) + 
+  geom_bar(mapping = aes(x = city))
+
+```
+
+
+**How closely do the graphs match? Are they closer for some cities than others? If so, why might this be?**
+
+*ANSWER:*
+From the plots, we see that the number of visits per city seems to be in proportion to the population for every city. But with a bigger sample size, the difference between the bars will reduce.
+
+___
+
+
+End of assignment

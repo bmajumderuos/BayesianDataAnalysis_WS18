@@ -1,0 +1,644 @@
+---
+title: "Homework 2 -- $z$-tests and $t$-tests"
+date: 'Due: Thursday, November 29 by 09:59 CET'
+author: "Bhaskar Majumder"
+output:
+  html_document
+---
+
+# Instructions
+* Work on your own, this is an individual assignment. Discussing concepts is perfectly fine, but your answers should be your own.
+* Make sure you have R and RStudio installed. If you are an advanced user and aren't using RStudio, make sure you have `rmarkdown` working in order to 'knit' the HTML output.
+* Download [this zip file](https://michael-franke.github.io/BDACM_2018/homework/BDACM_HW2.zip). This contains the R Markdown file you will edit and submit.
+* Open the .Rmd file in RStudio.
+* Fill in your name in the 'author' heading.
+* Fill in the required code and answers.
+* 'Knit' the document (`ctrl/cmd` + `shift` + `K` in RStudio) to produce a HTML file.
+* Create a ZIP archive called "BDACM_HW2-LastnameFirstname.zip" containing:
+   * an RMarkdown file "BDACM_HW2-LastnameFirstname.Rmd"
+   * the data file "BDACM_HW2_data.csv" (unchanged)
+   * a rendered HTML document "BDACM_HW2-LastnameFirstname.html"
+* Upload the ZIP archive through the 'Tasks' page on Stud.IP before the deadline. You may upload as many times as you like before the deadline, only your final submission will count.
+
+# Grading scheme
+* Total points: 21 (1 point for each question) and 1 point for correctly following submission instructions (correct naming of the ZIP file, correct contents, etc.)
+* For questions that have a coding part and an interpretation part, the total points are divided equally between the two.
+
+# Suggested readings
+* [R4DS](http://r4ds.had.co.nz/) (R for Data Science).
+
+# Required R packages
+* `rmarkdown` (comes with RStudio)
+* `tidyverse` (or `ggplot2`, `dplyr`, `purrr`, `tibble`)
+* `TeachingDemos`
+* `BSDA`
+
+___
+
+As always, load the required packages and change the seed to your last name.
+
+```{r}
+
+ library(tidyverse)
+ library(TeachingDemos)
+ library(BSDA)
+# 
+ lastname <- "majumder"
+# 
+ char2seed(lastname)
+
+```
+
+
+
+This homework sheet is about analysing IQ score results from
+two groups of people. One group had a placebo (sugar pill) and the other had a "smart drug" before taking the test.
+
+You have two research questions to answer:
+
+1. Is the mean IQ of the placebo group different from the supposed population mean?
+
+2. Is the mean IQ of the "smart drug" group different from the placebo group?
+
+
+# 1. Inspecting the data
+
+The data file `BDACM_HW2_data.csv` contains the results of the experiment.
+
+a. Read the file
+---
+
+Read the data file into a tibble called `iq_data` using the function
+`read_csv()`. Then print the tibble
+
+```{r}
+
+# YOUR CODE HERE
+data <- read.csv(file="BDACM_HW2_data.csv", header=TRUE, sep=",")
+iq_data <- as_tibble(data)
+iq_data
+#print(iq_data,tibble.print_max = n, width = Inf)
+```
+
+
+
+b. Tidy the data frame
+---
+
+Did you notice that the data frame is not "tidy"? The grouping
+variable is split into two different variables "placebo" and
+"drug" and the contents of these columns is the IQ scores.
+
+Use the `gather()` function to tidy the data frame. In this case `key`
+should be "group" and `value` should be "IQ_score".  Make sure to
+specify that `factor_key` should be `TRUE` (this will set the type of
+the group column to factor.  Put the tidy data frame into a new
+variable `iq_data_tidy` and print it.
+
+```{r}
+
+# YOUR CODE HERE
+iq_data_tidy = gather(iq_data, key = "group", value = "IQ_score", factor_key = TRUE)
+print(iq_data_tidy)
+
+
+```
+
+
+
+c. Plot the data
+---
+
+Use `ggplot` to make a box plot of the IQ scores of the two
+groups. Show groups on the x-axis and IQ_scores on the y axis. Use
+`ylim()` of 50 to 150.
+
+```{r}
+
+# YOUR CODE HERE
+library(ggplot2)
+ggplot(iq_data_tidy, aes(x = group, y = IQ_score)) + ylim(50,150) + geom_boxplot()
+
+```
+
+
+
+d. Another visualisation
+---
+
+It's often useful to plot the same data in different ways. Another way
+to plot this data is as a density plot.  Use `ggplot` to plot the
+density of the samples of the two groups. Plot each group in a
+different colour using`fill = group`. Use an `alpha = 0.5` on the density
+so that the distributions are visible on top of each other and an `xlim()` of 50 to 150.
+
+```{r}
+
+# YOUR CODE HERE
+ggplot(iq_data_tidy, aes(x = IQ_score, fill = group)) + geom_density(alpha = 0.5) + xlim(50, 150)
+
+
+```
+
+
+
+e. Summarising the data numerically
+---
+
+Now that you have inspected the data visually, it's time to take a
+closer look at the numbers.  Use the familiar `data %>% group_by() %>% summarise()`
+code to find the mean IQ scores and standard deviations of the two
+groups. Save the result into a variable called `iq_summary` and print
+it.
+
+```{r}
+
+# YOUR CODE HERE
+iq_summary <- iq_data_tidy %>% group_by(group) %>% summarise(mean=mean(IQ_score, na.rm = TRUE),std = sd(IQ_score, na.rm = TRUE))
+iq_summary
+```
+
+
+
+# 2. Understanding the data generation process
+
+To answer both of your research questions, it's important to 
+understand the difference between the data generation distribution 
+and the sampling distribution.
+
+
+a. The data generation distribution.
+---
+
+If we suppose that IQ scores are normally distributed with a true mean
+of 100 and a true standard deviation of 15, then choosing a single
+person from the population at random is akin to sampling from a
+norm(100, 15).
+
+If we sampled 21000 people and plotted their IQ scores, the resulting
+distribution would begin to approximate the true data generation
+distribution.
+
+```{r}
+
+# # YOUR CODE HERE:
+
+mu <- 100
+sigma <- 15
+
+n_samples <- 21000
+
+iq_simulation <- data_frame(sample = 1:n_samples, iq = NA)
+#iq_simulation
+
+for(i in 1:n_samples){
+
+  # sample a set of values
+  sample_value <- rnorm(n = 1,
+                         mean = mu,
+                         sd = sigma)
+
+  # save value to data frame
+  iq_simulation$iq[i] <- sample_value  }
+
+iq_simulation %>%
+  ggplot(aes(x = iq)) +
+  geom_histogram(binwidth = 1) +
+  scale_x_continuous(limits = c(50, 150)) +
+  xlab("IQ score") +
+  ylab("Frequency") +
+  ylim(0,1000) +
+  theme_classic()
+```
+
+
+
+b. The sampling distribution
+---
+
+However, in reality, our sample sizes are nowhere near large enough to
+approximate the true data generation distribution. Instead, we
+aggregate the sample into a single value (the mean).
+
+You can then imagine a hypothetical distribution of sample means, from
+which a single sample mean is drawn. This is called the sampling
+distribution.
+
+A sampling distribution is the hypothetical distribution from which
+a sample statistic (e.g. \(\bar{X}\)) is drawn. The mean of the
+sampling distribution is equal to the true
+mean of the population parameter.
+
+We can run a simulation to visualise the sampling
+distribution. Suppose we have the same data generating distribution
+norm(100, 15).
+
+If we repeatedly (say 1500 times) sample 14 people at random and
+calculate the mean IQ of each sample, the distribution of means will
+approximate the sampling distribution.
+
+```{r}
+
+# # YOUR CODE HERE
+#
+mu <- 100 # true population mean
+sigma <- 15 # true standard deviation
+
+sample_size <- 14 # number of people in each sample
+n_samples <- 1500 # number of samples
+
+sample_means <- data_frame(sample = 1:n_samples,
+                           mean = NA,
+                           std_dev = NA)
+
+for(i in 1:n_samples){
+
+  # sample a set of values
+  sample_values <- rnorm(n = sample_size,
+                         mean = mu,
+                         sd = sigma)
+
+  # get the mean of the sample
+  sample_means$mean[i] <- mean(sample_values)
+
+  # get the standard deviation of the samle
+  sample_means$std_dev[i] <- sd(sample_values)
+}
+
+#sample_means
+
+sample_means %>%
+  ggplot(aes(mean)) +
+  geom_histogram(binwidth = 1) +
+  scale_x_continuous(limits = c(50, 150)) +
+  xlab("Mean IQ score of sample") +
+  ylab("Frequency") +
+  ylim(0, 200) +
+  theme_classic()
+
+
+```
+
+
+
+**The sampling distribution is much narrower than the data generating distribution. Why do you think this is?**
+
+*ANSWER:*
+The standard deviation of the sample mean shrinks in proportion to the square-root of the sample size. This means that more data is added, more precise the estimates will be.
+
+
+
+# 3. \(z\) distributions and \(z\) tests
+
+To answer your first research question (whether the mean IQ in the 
+placebo group is higher than the expected population mean), you need
+to perform a one-sample test.
+
+
+a. Creating a z-distribution
+---
+
+A \(z\) transformation is a standardization of a normal distribution such
+that the mean becomes 0 and the standard deviation becomes 1.  We can
+convert the previously simulated sample mean distribution to a
+\(z\) distrubition like so. Fill in the correct formula for the
+ z-transformation of sample means.
+
+
+```{r}
+
+# FILL IN THE CODE:
+
+
+sample_means <- sample_means %>%
+    mutate(z_score = (sample_means$mean- mu) / (sigma/sqrt(sample_size)) )
+
+sample_means %>%
+  ggplot(aes(x = z_score)) +
+  geom_histogram(binwidth = 0.1) +
+  scale_x_continuous(limits = c(-5, 5)) +
+  
+  xlab("z-score of sample mean") +
+  ylab("Frequency") +
+  theme_classic() +
+  ylim(0, 100)
+
+
+```
+
+
+
+b. Calculating a z-score
+---
+
+Now that we have seen the connection between the sampling distribution
+and a derived z distribution, we can use this information for a
+z-test.
+
+Suppose that you want to know whether the mean of your sample for the
+placebo group is different from the expected population mean (100).
+You can do this by seeing the probability of drawing the mean of the
+placebo group from the sampling distribution.
+
+Historically, you would first convert your sample mean to a z-score.
+This allows for easy probability calculation (e.g. using a look up
+table), because the probabilities for many z scores are known.
+
+**What is the z-score for the mean of the placebo group, if we assume \(\mu = 100\) and \(\sigma = 15\)?**
+
+```{r}
+
+# YOUR CODE HERE:
+
+placebo_summary <- iq_data_tidy %>% 
+  filter(iq_data_tidy$group == "placebo") %>%
+  summarise(mean = mean(IQ_score),sd = sd(IQ_score), z_score = (mean(IQ_score) - mu)/(sigma/sqrt(sample_size)))
+
+placebo_summary
+
+
+```
+
+
+
+
+(your answer here)
+
+
+
+c. Calculating a p-value for the z score
+---
+
+We now have a z-score for our sample mean, but how improbable is it?
+Write code to find the two-tailed p-value for the calculated z-score.
+
+```{r}
+
+# YOUR CODE HERE:
+p_value = 2*(pnorm(placebo_summary$z_score, lower.tail=FALSE))
+p_value
+```
+
+
+
+**What is the p-value? What does this mean?**
+
+The p-value is the probability that the test statistic equals the observed value or a more extreme value under the assumption that the null hypothesis is true. In our case since the p value is 0.57 which is greater than the typical threshold of 0.05, we accept the null hypothesis.
+
+
+
+d. Using built-in functions
+---
+
+The package `BSDA` has a `z.test()` function. Steps b and c can be replaced with it.
+
+```{r}
+
+# # YOUR CODE HERE:
+placebo_data <- iq_data_tidy %>%
+  filter(group == "placebo")
+
+placebo_data$IQ_score %>%
+  z.test(mu = 100 , sigma.x = 15)
+
+
+```
+
+
+
+
+# 4. \(t\) distributions and one sample \(t\)-tests
+
+a. Simulating a t-distribution
+---
+
+\(z\)-tests are a nice tool when we know the true standard deviation,
+however, often this is not the case. In part 2, we assumed the true
+standard deviation was 15 (because that's the standard for IQ scores).
+However, we probably should not rely on the standard deviation being known in
+this case. (Actually, the data were generated from a known mean and
+standard deviation which will be revealed in class)
+
+In cases where the standard deviation is unknown, it can estimated
+based on the standard deviation of the sample.  We can use the
+simulated sample means and calculate a t-score for each, and so make an approximate plot of the sampling distribution.
+
+```{r}
+
+# # YOUR CODE HERE:
+
+sample_means <- sample_means %>%
+  mutate(t_score = (sample_means$mean- mu) / (sample_means$std_dev/sqrt(sample_size)) )
+
+sample_means %>%
+  ggplot( aes(x = t_score) ) +
+  geom_histogram(binwidth = 0.1) +
+  scale_x_continuous(limits = c(-5, 5)) +
+  xlab("t-score of sample mean") +
+  ylab("Frequency") +
+  ylim(0, 100) +
+  theme_classic()
+
+
+
+```
+
+
+
+The \(t\)-distribution looks quite similar to the z-distribution.
+The main difference is that the "tails" are a bit larger.
+Actually, the \(t\)-distribution gets closer to a z-distribution with increasing "degrees
+of freedom" (in this case just the sample size minus one).
+
+b. Calculating a t-score for the sample.
+---
+
+Just like the z-test, we can perform a t-test on our placebo sample,
+comparing it to the expected mean of 100. Calculate the test statistic ($t$-score) for the observed data.
+
+```{r}
+
+# YOUR CODE HERE:
+t_stat_placebo <- iq_data_tidy %>%
+  filter(iq_data_tidy$group == "placebo") %>%
+  summarise(t_score = (mean(IQ_score) - mu)/(sd(IQ_score)/sqrt(sample_size)))
+
+t_stat_placebo
+#iq_data_tidy
+
+```
+
+
+c. Calculating a $p$-value for the $t$-score
+---
+
+As before, we can compute the $p$-value of the data we observed, as the probability of observing a $t$-score that is not more extreme (= bigger) than the $t$-score of the observed data. Use the built-in $t$-distribution with function `pt()` to calculate the $p$-value
+
+```{r}
+
+# # YOUR CODE HERE:
+pvalue_t = 2*pt(-abs(t_stat_placebo$t_score), df = (sample_size-1))
+pvalue_t
+
+```
+
+
+d. Using built-in functions
+---
+
+Base R has a `t.test()` function. Steps b and c can be replaced with it.
+
+```{r}
+
+# # YOUR CODE HERE:
+# placebo_data <- iq_data_tidy %>%
+#   filter(group == "placebo")
+
+placebo_data$IQ_score %>%
+  t.test(mu = 100 , sigma.x = 15)
+
+```
+
+
+# 5. Two-sample \(t\)-tests
+
+In order to answer the second research question (whether or not the mean IQ in the "smart drug" group is different from the placebo group), we need to perform a two-sample test. We have not yet discussed the two-sample $t$-test in class, but it follows the exact same general logic. The purpose of this exercise is to run you through the two-sample $t$-test.
+
+The rationale behind the two-sample $t$-test is to determine whether two sets of (unpaired) samples are likely to come from the same population or not. (NB: Notice that there are actually two kinds of two-sample $t$-tests, one for paired samples, one for unpaired samples. We have paired samples if we have a measurement of the same individual in two experimental conditions. We have unpaired samples if we have measurements from different individuals in each group.) Formally, we have two random variables $X$ and $Y$. The $n_X$ data points from the placebo group are iid samples from random variable $X$; the $n_Y$ data points from the smart-drug group are iid samples from the random variable $Y$. We assume that both $X$ and $Y$ follow a normal distribution with means $\mu_X$ and $\mu_Y$ and standard deviations $\sigma_X$ and $\sigma_Y$. We do *not* assume that standard deviations $\sigma_X$ and $\sigma_Y$ are known, but we *do* assume that they are identical: $\sigma_X = \sigma_Y$. We are then interested in testing the **null-hypothesis**:
+
+$$H_0 \colon \mu_X = \mu_Y$$
+
+The corresponding **research hypothesis** is:
+
+$$H_0 \colon \mu_X \neq \mu_Y$$
+
+If the null-hypothesis is true, it can be shown that the sampling distribution:
+
+$$
+T = \sqrt{\frac{n_X \ n_Y \ (n_X + n_Y - 2)}{n_X + n_Y}} \cdot \frac{\bar{X} - \bar{Y}}{\sqrt{(n_X -1) S^2_X + (n_Y -1) S^2_Y}}
+$$
+
+follows a $t$-distribution with $f = n_X + n_Y -2$ degrees of freedom. (NB: In the formula above, as before, $\bar{x}$ is the sample mean, and $s$ is the sample standard deviation.)
+
+a. Calculate the $t$-score for the data
+---
+
+Like before, we use the above formula, defining the sampling distribution, to compute the test statistic for the observed data.
+
+```{r}
+
+## YOUR CODE HERE
+# iq_summary <- iq_data_tidy %>% group_by(group) %>% summarise(mean=mean(IQ_score, na.rm = TRUE),std = sd(IQ_score, na.rm = TRUE))
+# iq_summary
+
+
+n_X <- nrow(iq_data_tidy)/2
+n_Y <- nrow(iq_data_tidy)/2 
+
+x_bar <- filter(iq_summary, group == 'placebo')$mean
+y_bar <- filter(iq_summary, group == 'smart_drug')$mean
+sd_X <- filter(iq_summary, group == 'placebo')$std
+sd_Y <- filter(iq_summary, group == 'smart_drug')$std
+
+# x_bar <-  iq_data_tidy %>% 
+#   filter(iq_data_tidy$group == "placebo") %>%
+#   summarise(mean=mean(IQ_score))
+# y_bar <-  iq_data_tidy %>% 
+#   filter(iq_data_tidy$group == "smart_drug") %>%
+#   summarise(mean=mean(IQ_score))
+# sd_X <- iq_data_tidy %>% 
+#   filter(iq_data_tidy$group == "placebo") %>%
+#   summarise(sd=sd(IQ_score))
+# sd_Y <-  iq_data_tidy %>% 
+#   filter(iq_data_tidy$group == "smart_drug") %>%
+#   summarise(sd=sd(IQ_score))
+
+t_score <-  sqrt((n_X*n_Y*(n_X+n_Y-2))/(n_X+n_Y))*(x_bar-y_bar)/sqrt(((n_X-1)*sd_X^2)+((n_Y-1)*sd_Y^2))
+
+t_score
+
+#iq_data_tidy
+
+```
+
+
+
+
+b. Calculate the corresponding $p$-value
+---
+
+Based on what we know about the distribution of $T$ (that is follows a $t$-distribution with $f = n_X + n_Y - 2$ degrees of freedom), calculate the probability of seeing an outcome at least as extreme as the observed data.
+
+```{r}
+
+# YOUR CODE HERE
+
+pvalue_t = 2*pt(-abs(t_score), df = (n_X+n_Y-2))
+pvalue_t
+
+```
+
+
+
+c. Calculate the test using `t.test()`
+---
+
+The `t.test()` function can also perform two sample tests. Make sure that you set the options for an unpaired test with equal variance.
+
+```{r}
+
+# # YOUR CODE HERE:
+
+t.test( x = filter(iq_data_tidy, group == 'placebo')$IQ_score, y = filter(iq_data_tidy, group == 'smart_drug')$IQ_score , var.equal = TRUE, paired = FALSE)
+#filter(iq_summary, group == 'placebo')
+```
+
+
+d. How to interpret your result
+---
+
+If everything went well, you obtained a $p$-value of around $0.06$. Suppose that your research hypothesis is: "This smart drug influences cognitive performance, and therefore leads to a difference in measured IQ scores (higher or lower, we do not care, just some difference)." Based on your test result, which of the following statements are true. (Present your answers by typing on separate lines strings like "(xxii) false" with one line for each consecutive statement. We assume the standard $\alpha$ level of $0.05$.)
+
+(i) The test results show that it is likely that the smart drug influences IQ-scores because the $p$-value is very close to significance.
+(ii) If we repeat the experiment, we will obtain a significant result in around 6% of the cases. This means that it is likely that the smart drug did have an effect on IQ scores even if *this* particular teszt result was not significant.
+(iii) We are not able to reject the null-hypothesis. This means that the research hypothesis is almost surely false. The smart drug has no effect on IQ scores.
+(iv) The $p$-value has not reached significance. The null-hypothesis is therefore very likely true.
+(v) The test result was inconclusive. There are no grounds based on which we could reject the null hypothesis. Thus far we cannot draw any conclusions about the research hypothesis.
+
+**Are each of these true or false?**
+
+ANSWER:
+
+(i) false
+(ii) false
+(iii) true
+(iv) true
+(v) false
+
+
+e. How to interpret a fictional result
+---
+
+Since the frequentist paradigm is all about counterfactual data (i.e., data which we could have seen but have not), suppose the $p$ value had turned out to be $0.03$. Which of the following statements are true/false then? (Present your answers by typing on separate lines strings like "(xxii) false" with one line for each consecutive statement. We assume the standard $\alpha$ level of $0.05$.)
+
+(i) The test results show that it is likely that the smart drug influences IQ-scores.
+(ii) If we repeat the experiment, we will false reject the null-hypothesis in around 3% of the cases.
+(iii) We can reject the null-hypothesis. This means that the research hypothesis is almost surely false. The smart drug has no effect on IQ scores.
+(iv) The $p$-value has reaached significance. The null-hypothesis is therefore very likely false.
+(v) The test result was significant. We therefore reject the null-hypothesis and adopt the research hypothesis that the smart drug has an effect on IQ scores.
+
+**Are each of these true or false?**
+
+ANSWER:
+
+(i) true
+(ii) false
+(iii) false
+(iv) true
+(v) true
+
+
+
+___
+
+End of assignment

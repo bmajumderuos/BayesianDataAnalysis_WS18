@@ -1,0 +1,357 @@
+---
+title: "Homework Sheet 1 -- Basics in R"
+date: 'Due: Tuesday, November 6 by 09:59 CET'
+author: "Bhaskar Majumder"
+output:
+  html_document
+---
+
+# Instructions
+* Work on your own. This homework should not be incredibly hard. If you need help, take a look at the suggested readings.
+* Make sure you have R and RStudio installed. If you are an advanced user and aren't using RStudio, make sure you have `rmarkdown` in order to 'knit' the HTML output.
+* Download [this R Markdown file](https://michael-franke.github.io/BDACM_2018/homework/BDACM_HW1.zip). This is the file you will edit and submit.
+* Open the .Rmd file in RStudio.
+* Fill in your name in the 'author' heading.
+* Fill in the required code and answers.
+* 'Knit' the document (`ctrl/cmd` + `shift` + `K` in RStudio) to produce a HTML file.
+* Create a ZIP archive called "BDACM_HW1-LastnameFirstname.zip" containing:
+   * an R Markdown file "BDACM_HW1-LastnameFirstname.Rmd"
+   * a rendered HTML document "BDACM_HW1-LastnameFirstname.html"
+* Upload the ZIP archive through the 'Tasks' page on Stud.IP before the deadline. You may upload as many times as you like before the deadline, only your final submission will count.
+
+# Grading scheme
+* Total points: 16
+* Points required to pass: 10
+* For questions that have a coding part and an interpretation part, the total points are divided equally between the two.
+
+# Suggested readings
+* [R4DS](http://r4ds.had.co.nz/) (R for Data Science).
+
+# Required R packages
+* `rmarkdown` (comes with RStudio)
+* `tidyverse`
+* `TeachingDemos`
+
+___
+
+# 1. Installing and running R (2 points)
+
+a. (1 point)
+---
+
+Your first task is simply to show that you have been able to install
+and run R and R Markdown.  You don't have to change this code, just
+uncomment it. Then the correct output will automatically appear when
+you 'knit' the document.
+
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# UNCOMMENT THE CODE
+
+R.version
+
+sessionInfo()
+```
+
+
+**Which version of R are you running? On which platform are you running it?**
+
+*ANSWER: Version of R is 3.5.1  Platform: x86_64-w64-mingw32/x64 (64-bit)
+Running under: Windows 10 x64 (build 17134)*
+
+
+
+b. (1 point)
+---
+
+Install the package `tidyverse`. Don't install it in the code
+below. Instead, install it through the console. Then write code below
+to load the package and show the sessionInfo again.
+
+
+```{r tidy = FALSE, message = TRUE, warning = TRUE, error = FALSE}
+
+# YOUR CODE HERE
+
+library(tidyverse)
+sessionInfo()
+
+```
+
+
+**Which version of `tidyverse` do you have installed?**
+
+*ANSWER: tidyverse 1.2.1 *
+
+
+
+___
+
+# 2. Rolling dice in R (4 points)
+
+
+a. (1 point)
+---
+
+Install the package `TeachingDemos`. Then uncomment the code below and
+change `"yourLastName"` to your lastname. Use all lowercase letters
+for your lastname.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# UNCOMMENT THE CODE AND CHANGE YOUR LASTNAME
+
+library(TeachingDemos)
+
+lastname <- "majumder"
+
+```
+
+
+b. (1 point)
+---
+
+Roll three six-sided dice by uncommenting the code below.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# UNCOMMENT THE CODE
+
+char2seed(lastname)
+
+dice(rolls = 1, ndice = 3, sides = 6, plot.it = TRUE)
+
+```
+
+
+
+**What values did the dice show?**
+
+*ANSWER: 6, 1, 4*
+
+
+
+c. (1 point)
+---
+
+Roll the dice again.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# UNCOMMENT THE CODE
+
+dice(rolls = 1, ndice = 3, sides = 6, plot.it = TRUE)
+
+```
+
+
+
+**What values did the dice show this time?**
+
+*ANSWER: 3, 4, 5 *
+
+
+d. (1 point)
+---
+
+Roll the dice again. But first reset the random seed.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+#UNCOMMENT THE CODE
+
+char2seed(lastname)
+
+dice(rolls = 1, ndice = 3, sides = 6, plot.it = TRUE)
+
+```
+
+
+**What values did the dice show this time? Do you think R generates truly random numbers?**
+
+*ANSWER: 6, 1, 4. R generates the random numbers based on certain algorithms or distributions and thus it's not truly random but pseudo random *
+
+
+
+___
+
+# 3. Tibbles (tidy tables) (6 points)
+
+
+The iris data set comes with base R. You can read about this data set
+by running `?iris` in the console.  It is a data frame. In this
+course, we prefer to use tibbles (tidy tables) instead of data frames.
+
+a. (1 point)
+---
+
+Convert the `iris` data frame into a tibble using `as_tibble()`. Put
+this in a new variable called `iris_tibble`. Then print the tibble
+using the `print()` function.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# YOUR CODE HERE
+
+library(tibble)
+iris_tibble = as_tibble(iris)
+
+print(iris_tibble)
+
+```
+
+
+
+**Which data type is the variable "Species"? How do you know?**
+
+*ANSWER: Species is a factor. It's shown as fct *
+
+
+
+b. (1 point)
+---
+
+Starting from the complete `iris` data set, filter only the flowers
+with a sepal length at least 4.5cm. Do this by piping (`%>%`) the
+`iris_tibble` to the `filter()` function.  Hint: You can type the pipe
+quickly in RStudio with the command `ctrl/cmd` + `shift` + `M`.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# YOUR CODE HERE
+
+#library(tibble)
+#iris_tibble = as_tibble(iris)
+iris_tibble %>% filter(Sepal.Length >= 4.5)
+```
+
+**How many datapoints (i.e. flowers) are left? How do you know?**
+
+*ANSWER: 146 datapoints. The output says "A tibble: 146 x 5" before the table*
+
+
+
+c. (1 point)
+---
+
+Starting from the complete `iris` data set, create a new variable
+called `petal_area` (the area of a petal = petal width times petal
+length). Do this by piping `iris_tibble` to `mutate()`.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# YOUR CODE HERE
+iris_tibble %>%
+  mutate(petal_area = Petal.Length * Petal.Width) 
+
+
+```
+
+
+
+d. (1 point)
+---
+
+Find out the mean sepal length for each species. Do this with by
+piping `iris_tibble` to `group_by()` and then to `summarise()`.  For
+instructions read the help page for `summarise()`.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# YOUR CODE HERE
+iris_tibble %>%
+  group_by(Species) %>%
+  summarise(mean_sepal_length = mean(Sepal.Length , na.rm = TRUE ))
+ 
+
+```
+
+
+**What is the mean sepal length for virginica?**
+
+*ANSWER: 6.59 *
+
+
+
+e. (2 points)
+---
+
+Starting from the complete `iris` data set, filter only the flowers
+that are either 'versicolor' or 'virginica' and have a petal width
+between 1.5 and 2.0cm (inclusive). Hint: read the help pages on `%in%`
+and `between()`.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# YOUR CODE HERE
+iris_tibble %>%
+  filter(Species %in% c("versicolor", "virginica")) %>%
+  filter(Petal.Width, between(Petal.Width,1.5,2.0))
+
+
+
+```
+
+
+**How many datapoints (i.e. flowers) are left? How do you know?**
+
+*ANSWER: 41 datapoints. The tibble says " A tibble: 41 x 5"*
+
+
+___
+
+# 4. Plotting data (4 points)
+
+
+a. (2 points)
+---
+
+Using the `iris` data set, create a scatterplot of sepal width (x
+axis) against sepal length (y axis) using `ggplot()`. Show each
+species in a different colour.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# YOUR CODE HERE
+library(ggplot2)
+ggplot(data = iris_tibble, aes(x = Sepal.Width, y = Sepal.Length, color = Species)) +
+geom_point()
+
+```
+
+
+**Which species stands out visually? Why?**
+
+*ANSWER: Setosa has a cluster of its own so it stands out visually*
+
+
+
+b. (2 points)
+---
+
+Using the `iris` data set, create a scatterplot of petal width (x
+axis) against petal length (y axis). Vary the size of the points
+depending on the sepal width and the colour depending on the sepal
+length. Use `ggplot()`.
+
+```{r tidy = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+
+# YOUR CODE HERE
+library(ggplot2)
+ggplot(data = iris_tibble, aes(x = Petal.Width, y = Petal.Length, color = Sepal.Length, size = Sepal.Width)) +
+geom_point()
+
+
+```
+
+
+**What do you notice about the relationship between petal length and sepal length?**
+
+*ANSWER:Larger the petal length larger the Sepal Length*
+
+
+
+___
+
+End of homework sheet
